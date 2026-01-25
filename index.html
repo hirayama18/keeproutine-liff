@@ -22,8 +22,11 @@
     <p id="message" class="muted"></p>
 
     <script>
-      const liffId = new URLSearchParams(location.search).get("liffId");
-      const endpoint = new URLSearchParams(location.search).get("endpoint");
+      const params = new URLSearchParams(location.search);
+      const defaultLiffId = "2008961313-udzVjHhi";
+      const defaultEndpoint = "https://mvzorfznpwgjflhsjspc.supabase.co/functions/v1/line-link";
+      const liffId = params.get("liffId") || defaultLiffId;
+      const endpoint = params.get("endpoint") || defaultEndpoint;
       const message = document.getElementById("message");
       const button = document.getElementById("submit");
       const codeInput = document.getElementById("code");
@@ -31,7 +34,7 @@
 
       async function init() {
         if (!liffId || !endpoint) {
-          message.textContent = "設定が不足しています。";
+          message.textContent = "設定が不足しています。URLを確認してください。";
           message.className = "muted error";
           return;
         }
