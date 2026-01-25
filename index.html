@@ -20,6 +20,7 @@
     <input id="code" placeholder="連携コード" />
     <button id="submit" disabled>連携する</button>
     <p id="message" class="muted"></p>
+    <p id="debug" class="muted"></p>
 
     <script>
       const params = new URLSearchParams(location.search);
@@ -28,6 +29,7 @@
       const liffId = params.get("liffId") || defaultLiffId;
       const endpoint = params.get("endpoint") || defaultEndpoint;
       const message = document.getElementById("message");
+      const debug = document.getElementById("debug");
       const button = document.getElementById("submit");
       const codeInput = document.getElementById("code");
       let ready = false;
@@ -46,6 +48,7 @@
           }
           ready = true;
           message.textContent = "";
+          debug.textContent = `liffId=${liffId}, endpoint=${endpoint}`;
           updateButtonState();
         } catch (error) {
           message.textContent = "LINE内で開いてください。";
@@ -69,18 +72,25 @@
           message.className = "muted error";
           return;
         }
-        const profile = await liff.getProfile();
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code, lineUserId: profile.userId }),
-        });
-        if (res.ok) {
-          message.textContent = "連携が完了しました。";
-          message.className = "muted success";
-        } else {
-          const data = await res.json().catch(() => ({}));
-          message.textContent = data.error ? `連携に失敗: ${data.error}` : "連携に失敗しました。";
+        try {
+          message.textContent = "連携中...";
+          message.className = "muted";
+          const profile = await liff.getProfile();
+          const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code, lineUserId: profile.userId }),
+          });
+          const text = await res.text();
+          if (res.ok) {
+            message.textContent = "連携が完了しました。";
+            message.className = "muted success";
+          } else {
+            message.textContent = `連携に失敗: ${res.status} ${text}`;
+            message.className = "muted error";
+          }
+        } catch (error) {
+          message.textContent = `連携に失敗: ${error}`;
           message.className = "muted error";
         }
       });
