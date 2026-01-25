@@ -18,13 +18,16 @@
     <h2>LINE連携</h2>
     <p>アプリで発行した連携コードを入力してください。</p>
     <input id="code" placeholder="連携コード" />
-    <button id="submit">連携する</button>
+    <button id="submit" disabled>連携する</button>
     <p id="message" class="muted"></p>
 
     <script>
       const liffId = new URLSearchParams(location.search).get("liffId");
       const endpoint = new URLSearchParams(location.search).get("endpoint");
       const message = document.getElementById("message");
+      const button = document.getElementById("submit");
+      const codeInput = document.getElementById("code");
+      let ready = false;
 
       async function init() {
         if (!liffId || !endpoint) {
@@ -32,11 +35,25 @@
           message.className = "muted error";
           return;
         }
-        await liff.init({ liffId });
+        try {
+          await liff.init({ liffId });
+          ready = true;
+          updateButtonState();
+        } catch (error) {
+          message.textContent = "LINE内で開いてください。";
+          message.className = "muted error";
+        }
       }
 
-      document.getElementById("submit").addEventListener("click", async () => {
-        const code = document.getElementById("code").value.trim();
+      function updateButtonState() {
+        const hasCode = codeInput.value.trim().length > 0;
+        button.disabled = !ready || !hasCode;
+      }
+
+      codeInput.addEventListener("input", updateButtonState);
+
+      button.addEventListener("click", async () => {
+        const code = codeInput.value.trim();
         if (!code) {
           message.textContent = "連携コードを入力してください。";
           message.className = "muted error";
