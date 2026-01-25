@@ -37,7 +37,12 @@
         }
         try {
           await liff.init({ liffId });
+          if (!liff.isLoggedIn()) {
+            liff.login();
+            return;
+          }
           ready = true;
+          message.textContent = "";
           updateButtonState();
         } catch (error) {
           message.textContent = "LINE内で開いてください。";
@@ -51,6 +56,8 @@
       }
 
       codeInput.addEventListener("input", updateButtonState);
+      codeInput.addEventListener("change", updateButtonState);
+      codeInput.addEventListener("keyup", updateButtonState);
 
       button.addEventListener("click", async () => {
         const code = codeInput.value.trim();
