@@ -83,6 +83,15 @@
         }
       }
 
+      function updateButtonState() {
+        const hasCode = codeInput.value.trim().length > 0;
+        button.disabled = !ready || !hasCode;
+      }
+
+      codeInput.addEventListener("input", updateButtonState);
+      codeInput.addEventListener("change", updateButtonState);
+      codeInput.addEventListener("keyup", updateButtonState);
+
       async function performLink(code) {
         try {
           addLog(`Connecting to: ${endpoint}`);
