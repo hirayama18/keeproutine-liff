@@ -16,6 +16,10 @@
   </head>
   <body>
     <h2>LINE連携</h2>
+    <div id="external-browser-view" style="display: none; background: #fff3cd; padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #ffeeba;">
+      <p style="margin: 0 0 12px 0; color: #856404;">LINEアプリ以外で開いています。</p>
+      <button onclick="openInLine()" style="background: #00b900; color: white; border: none; font-weight: bold;">LINEアプリで開く</button>
+    </div>
     <p>アプリで発行した連携コードを入力してください。</p>
     <input id="code" placeholder="連携コード" />
     <button id="submit" disabled>連携する</button>
@@ -29,11 +33,8 @@
       function getParam(name) {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has(name)) return urlParams.get(name);
-        
-        // #の後ろに入っている場合も考慮
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         if (hashParams.has(name)) return hashParams.get(name);
-        
         return null;
       }
 
@@ -54,17 +55,25 @@
         console.log(msg);
       }
 
+      function openInLine() {
+        const currentCode = getParam("code") || localStorage.getItem("link_code");
+        const lineUrl = `line://app/2008961313-udzVjHhi?code=${currentCode || ""}`;
+        window.location.href = lineUrl;
+      }
+
       async function init() {
         addLog("Initializing LIFF...");
         addLog(`Full URL: ${window.location.href}`);
-        addLog(`Search: ${window.location.search}`);
-        addLog(`Hash: ${window.location.hash}`);
         
-        // ログイン前にコードを一時保存
+        if (!liff.isInClient()) {
+          document.getElementById("external-browser-view").style.display = "block";
+          addLog("External browser detected");
+        }
+
         const urlCode = getParam("code");
         if (urlCode) {
-          sessionStorage.setItem("link_code", urlCode);
-          addLog(`Code found in URL and saved: ${urlCode}`);
+          localStorage.setItem("link_code", urlCode);
+          addLog(`Code saved: ${urlCode}`);
         }
 
         if (!liffId || !endpoint) {
@@ -88,15 +97,14 @@
           message.textContent = "";
           updateButtonState();
 
-          // メモリまたはURLからコードを取得
-          const finalCode = getParam("code") || sessionStorage.getItem("link_code");
+          const finalCode = getParam("code") || localStorage.getItem("link_code");
           addLog(`Final code to use: ${finalCode || "none"}`);
           
           if (finalCode) {
             addLog("Starting auto-link...");
             codeInput.value = finalCode;
             updateButtonState();
-            sessionStorage.removeItem("link_code");
+            localStorage.removeItem("link_code");
             await performLink(finalCode);
           } else {
             addLog("No code found. Please enter manually if needed.");
