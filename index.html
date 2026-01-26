@@ -3,51 +3,80 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Keeproutine 連携</title>
+    <title>Keeproutine 記録修正</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
-      body { font-family: -apple-system, sans-serif; margin: 24px; }
-      input, button { width: 100%; padding: 12px; font-size: 16px; }
-      button { margin-top: 12px; }
-      .muted { color: #666; font-size: 12px; margin-top: 8px; }
+      body { font-family: -apple-system, sans-serif; margin: 0; background: #f4f7f9; color: #333; }
+      .container { padding: 20px; }
+      h2 { font-size: 20px; margin-bottom: 20px; text-align: center; color: #2c3e50; }
+      .card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+      
+      /* Slot Row */
+      .slot-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; }
+      .slot-row:last-child { border-bottom: none; }
+      .slot-info { flex: 1; }
+      .slot-label { font-weight: bold; font-size: 16px; }
+      .slot-time { font-size: 12px; color: #888; margin-top: 2px; }
+      
+      /* Toggle Buttons */
+      .status-group { display: flex; background: #f0f2f5; border-radius: 20px; padding: 3px; }
+      .status-btn { border: none; background: transparent; padding: 6px 12px; font-size: 13px; font-weight: bold; border-radius: 17px; cursor: pointer; color: #666; transition: all 0.2s; }
+      .status-btn.active.taken { background: #28a745; color: white; }
+      .status-btn.active.skipped { background: #dc3545; color: white; }
+      
+      /* Utility */
+      .muted { color: #666; font-size: 13px; text-align: center; margin-top: 10px; }
       .error { color: #d00; }
-      .success { color: #0a0; }
+      .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.8); display: flex; align-items: center; justify-content: center; z-index: 100; }
+      
+      /* External Browser */
+      #external-browser-view { background: #fff3cd; padding: 16px; border-radius: 12px; margin-bottom: 16px; border: 1px solid #ffeeba; text-align: center; }
+      .btn-line { background: #00b900; color: white; border: none; padding: 12px; border-radius: 8px; width: 100%; font-weight: bold; }
     </style>
   </head>
   <body>
-    <h2>LINE連携</h2>
-    <div id="external-browser-view" style="display: none; background: #fff3cd; padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #ffeeba;">
-      <p style="margin: 0 0 12px 0; color: #856404;">LINEアプリ以外で開いています。</p>
-      <button onclick="openInLine()" style="background: #00b900; color: white; border: none; font-weight: bold;">LINEアプリで開く</button>
-    </div>
-    <p>アプリで発行した連携コードを入力してください。</p>
-    <input id="code" placeholder="連携コード" />
-    <button id="submit" disabled>連携する</button>
-    <p id="message" class="muted"></p>
-    <div id="status-log" style="font-size: 10px; color: #888; margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px;">
-      <strong>Debug Log:</strong>
-      <ul id="log-list" style="list-style: none; padding: 0;"></ul>
+    <div id="loading" class="loading-overlay">読み込み中...</div>
+
+    <div class="container">
+      <div id="external-browser-view" style="display: none;">
+        <p style="margin: 0 0 12px 0; color: #856404;">LINEアプリで開いてください。</p>
+        <button onclick="openInLine()" class="btn-line">LINEアプリで開く</button>
+      </div>
+
+      <!-- Editing View -->
+      <div id="edit-view" style="display: none;">
+        <h2 id="date-display">服薬記録の修正</h2>
+        <div class="card" id="slot-list">
+          <!-- Slots will be injected here -->
+        </div>
+        <p class="muted">タップして状態を切り替えられます</p>
+        <button onclick="liff.closeWindow()" style="width: 100%; margin-top: 20px; padding: 12px; border-radius: 12px; border: 1px solid #ccc; background: white;">閉じる</button>
+      </div>
+
+      <!-- Linking View -->
+      <div id="link-view" style="display: none;">
+        <h2>LINE連携</h2>
+        <div class="card">
+          <p>アプリで発行した連携コードを入力してください。</p>
+          <input id="link-code" style="width: 90%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 18px;" placeholder="連携コード" />
+          <button id="link-submit" style="width: 100%; margin-top: 15px; padding: 12px; background: #007bff; color: white; border: none; border-radius: 8px; font-weight: bold;">連携する</button>
+        </div>
+        <p id="link-message" class="muted"></p>
+      </div>
+
+      <div id="debug" style="font-size: 10px; color: #aaa; margin-top: 40px; border-top: 1px solid #eee; padding-top: 10px;">
+        <details>
+          <summary>Debug Info</summary>
+          <ul id="log-list" style="padding-left: 15px;"></ul>
+        </details>
+      </div>
     </div>
 
     <script>
-      function getParam(name) {
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has(name)) return urlParams.get(name);
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        if (hashParams.has(name)) return hashParams.get(name);
-        return null;
-      }
-
       const defaultLiffId = "2008961313-udzVjHhi";
-      const defaultEndpoint = "https://mvzorfznpwgjflhsjspc.supabase.co/functions/v1/line-link";
-      const liffId = getParam("liffId") || defaultLiffId;
-      const endpoint = getParam("endpoint") || defaultEndpoint;
-      const message = document.getElementById("message");
-      const button = document.getElementById("submit");
-      const codeInput = document.getElementById("code");
+      const apiBase = "https://mvzorfznpwgjflhsjspc.supabase.co/functions/v1";
+      
       const logList = document.getElementById("log-list");
-      let ready = false;
-
       function addLog(msg) {
         const li = document.createElement("li");
         li.textContent = `${new Date().toLocaleTimeString()}: ${msg}`;
@@ -55,123 +84,144 @@
         console.log(msg);
       }
 
+      function getParam(name) {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has(name)) return urlParams.get(name);
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        return hashParams.get(name);
+      }
+
       function openInLine() {
-        const currentCode = getParam("code") || localStorage.getItem("link_code");
-        const lineUrl = `line://app/2008961313-udzVjHhi?code=${currentCode || ""}`;
-        window.location.href = lineUrl;
+        const date = getParam("date");
+        const code = getParam("code") || localStorage.getItem("link_code");
+        let url = `line://app/${defaultLiffId}`;
+        if (date) url += `?date=${date}`;
+        else if (code) url += `?code=${code}`;
+        window.location.href = url;
       }
 
       async function init() {
-        addLog("Initializing LIFF...");
-        addLog(`Full URL: ${window.location.href}`);
-        
+        addLog("LIFF Init start...");
         if (!liff.isInClient()) {
           document.getElementById("external-browser-view").style.display = "block";
-          addLog("External browser detected");
         }
 
-        const urlCode = getParam("code");
-        if (urlCode) {
-          localStorage.setItem("link_code", urlCode);
-          addLog(`Code saved: ${urlCode}`);
-        }
-
-        if (!liffId || !endpoint) {
-          message.textContent = "設定が不足しています。URLを確認してください。";
-          message.className = "muted error";
-          addLog("Missing config: liffId or endpoint");
-          return;
-        }
         try {
-          await liff.init({ liffId });
-          addLog("LIFF init success");
-          
+          await liff.init({ liffId: defaultLiffId });
           if (!liff.isLoggedIn()) {
-            addLog("Not logged in, starting login...");
             liff.login({ redirectUri: window.location.href });
             return;
           }
-          
-          addLog("User is logged in");
-          ready = true;
-          message.textContent = "";
-          updateButtonState();
 
-          const finalCode = getParam("code") || localStorage.getItem("link_code");
-          addLog(`Final code to use: ${finalCode || "none"}`);
-          
-          if (finalCode) {
-            addLog("Starting auto-link...");
-            codeInput.value = finalCode;
-            updateButtonState();
-            localStorage.removeItem("link_code");
-            await performLink(finalCode);
+          const profile = await liff.getProfile();
+          const date = getParam("date");
+          const code = getParam("code") || localStorage.getItem("link_code");
+
+          document.getElementById("loading").style.display = "none";
+
+          if (date) {
+            // 修正モード
+            showEditView(profile.userId, date);
           } else {
-            addLog("No code found. Please enter manually if needed.");
+            // 連携モード
+            showLinkView(profile.userId, code);
           }
-        } catch (error) {
-          addLog(`Init error: ${error}`);
-          message.textContent = "LINE内で開いてください。";
-          message.className = "muted error";
+        } catch (e) {
+          addLog("Error: " + e);
+          document.getElementById("loading").textContent = "エラーが発生しました: " + e;
         }
       }
 
-      function updateButtonState() {
-        const hasCode = codeInput.value.trim().length > 0;
-        button.disabled = !ready || !hasCode;
+      async function showEditView(lineUserId, date) {
+        document.getElementById("edit-view").style.display = "block";
+        document.getElementById("date-display").textContent = date + " の記録";
+        await refreshSlots(lineUserId, date);
       }
 
-      codeInput.addEventListener("input", updateButtonState);
-      codeInput.addEventListener("change", updateButtonState);
-      codeInput.addEventListener("keyup", updateButtonState);
-
-      async function performLink(code) {
+      async function refreshSlots(lineUserId, date) {
+        const list = document.getElementById("slot-list");
+        list.innerHTML = "読み込み中...";
+        
         try {
-          addLog(`Connecting to: ${endpoint}`);
-          message.textContent = "連携中...";
-          message.className = "muted";
-          
-          const profile = await liff.getProfile();
-          addLog(`Got profile: ${profile.displayName}`);
-          
-          const res = await fetch(endpoint, {
+          const res = await fetch(`${apiBase}/liff-api`, {
+            method: "POST",
+            body: JSON.stringify({ action: "get", lineUserId, date })
+          });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+
+          list.innerHTML = "";
+          data.slots.forEach(slot => {
+            const state = data.states.find(s => s.slot_id === slot.id);
+            const status = state ? state.status : "unknown";
+            
+            const row = document.createElement("div");
+            row.className = "slot-row";
+            row.innerHTML = `
+              <div class="slot-info">
+                <div class="slot-label">${slot.label}</div>
+                <div class="slot-time">${slot.remind_at.substring(11, 16)}</div>
+              </div>
+              <div class="status-group">
+                <button class="status-btn ${status === 'taken' ? 'active taken' : ''}" onclick="updateStatus('${lineUserId}', '${date}', '${slot.id}', 'taken')">飲んだ</button>
+                <button class="status-btn ${status === 'skipped' ? 'active skipped' : ''}" onclick="updateStatus('${lineUserId}', '${date}', '${slot.id}', 'skipped')">飲まない</button>
+              </div>
+            `;
+            list.appendChild(row);
+          });
+        } catch (e) {
+          list.innerHTML = `<p class="error">読み込み失敗: ${e.message}</p>`;
+        }
+      }
+
+      async function updateStatus(lineUserId, date, slotId, status) {
+        try {
+          const res = await fetch(`${apiBase}/liff-api`, {
+            method: "POST",
+            body: JSON.stringify({ action: "update", lineUserId, date, slotId, status })
+          });
+          if (res.ok) {
+            await refreshSlots(lineUserId, date);
+          }
+        } catch (e) {
+          alert("更新に失敗しました: " + e);
+        }
+      }
+
+      function showLinkView(lineUserId, code) {
+        document.getElementById("link-view").style.display = "block";
+        const input = document.getElementById("link-code");
+        const btn = document.getElementById("link-submit");
+        const msg = document.getElementById("link-message");
+        
+        if (code) {
+          input.value = code;
+          localStorage.removeItem("link_code");
+          performLink(lineUserId, code, msg);
+        }
+
+        btn.onclick = () => performLink(lineUserId, input.value, msg);
+      }
+
+      async function performLink(lineUserId, code, msgView) {
+        msgView.textContent = "連携中...";
+        try {
+          const res = await fetch(`${apiBase}/line-link`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code, lineUserId: profile.userId }),
+            body: JSON.stringify({ code, lineUserId }),
           });
-          
-          const text = await res.text();
-          addLog(`Server response: ${res.status}`);
-          
           if (res.ok) {
-            addLog("Success! Closing window in 3s...");
-            message.textContent = "連携が完了しました！この画面を閉じてトーク画面に戻ってください。";
-            message.className = "muted success";
-            button.disabled = true;
-            if (liff.isInClient()) {
-              setTimeout(() => { liff.closeWindow(); }, 3000);
-            }
+            msgView.innerHTML = "<span class='success'>連携が完了しました！</span>";
+            setTimeout(() => liff.closeWindow(), 2000);
           } else {
-            addLog(`Error from server: ${text}`);
-            message.textContent = `連携に失敗: ${res.status} ${text}`;
-            message.className = "muted error";
+            const txt = await res.text();
+            msgView.innerHTML = `<span class='error'>失敗: ${txt}</span>`;
           }
-        } catch (error) {
-          addLog(`Fetch error: ${error}`);
-          message.textContent = `連携に失敗: ${error}`;
-          message.className = "muted error";
+        } catch (e) {
+          msgView.innerHTML = `<span class='error'>エラー: ${e}</span>`;
         }
       }
-
-      button.addEventListener("click", async () => {
-        const code = codeInput.value.trim();
-        if (!code) {
-          message.textContent = "連携コードを入力してください。";
-          message.className = "muted error";
-          return;
-        }
-        await performLink(code);
-      });
 
       init();
     </script>
