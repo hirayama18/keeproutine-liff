@@ -20,7 +20,10 @@
     <input id="code" placeholder="連携コード" />
     <button id="submit" disabled>連携する</button>
     <p id="message" class="muted"></p>
-    <p id="debug" class="muted"></p>
+    <div id="status-log" style="font-size: 10px; color: #888; margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px;">
+      <strong>Debug Log:</strong>
+      <ul id="log-list" style="list-style: none; padding: 0;"></ul>
+    </div>
 
     <script>
       const params = new URLSearchParams(location.search);
@@ -29,41 +32,94 @@
       const liffId = params.get("liffId") || defaultLiffId;
       const endpoint = params.get("endpoint") || defaultEndpoint;
       const message = document.getElementById("message");
-      const debug = document.getElementById("debug");
       const button = document.getElementById("submit");
       const codeInput = document.getElementById("code");
+      const logList = document.getElementById("log-list");
       let ready = false;
 
+      function addLog(msg) {
+        const li = document.createElement("li");
+        li.textContent = `${new Date().toLocaleTimeString()}: ${msg}`;
+        logList.insertBefore(li, logList.firstChild);
+        console.log(msg);
+      }
+
       async function init() {
+        addLog("Initializing LIFF...");
         if (!liffId || !endpoint) {
           message.textContent = "設定が不足しています。URLを確認してください。";
           message.className = "muted error";
+          addLog("Missing config: liffId or endpoint");
           return;
         }
         try {
           await liff.init({ liffId });
+          addLog("LIFF init success");
+          
           if (!liff.isLoggedIn()) {
-            liff.login();
+            addLog("Not logged in, starting login...");
+            liff.login({ redirectUri: location.href });
             return;
           }
+          
+          addLog("User is logged in");
           ready = true;
           message.textContent = "";
-          debug.textContent = `liffId=${liffId}, endpoint=${endpoint}`;
           updateButtonState();
+
+          const autoCode = params.get("code");
+          addLog(`Code in URL: ${autoCode || "none"}`);
+          
+          if (autoCode) {
+            addLog("Starting auto-link...");
+            codeInput.value = autoCode;
+            updateButtonState();
+            await performLink(autoCode);
+          }
         } catch (error) {
+          addLog(`Init error: ${error}`);
           message.textContent = "LINE内で開いてください。";
           message.className = "muted error";
         }
       }
 
-      function updateButtonState() {
-        const hasCode = codeInput.value.trim().length > 0;
-        button.disabled = !ready || !hasCode;
+      async function performLink(code) {
+        try {
+          addLog(`Connecting to: ${endpoint}`);
+          message.textContent = "連携中...";
+          message.className = "muted";
+          
+          const profile = await liff.getProfile();
+          addLog(`Got profile: ${profile.displayName}`);
+          
+          const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code, lineUserId: profile.userId }),
+          });
+          
+          const text = await res.text();
+          addLog(`Server response: ${res.status}`);
+          
+          if (res.ok) {
+            addLog("Success! Closing window in 3s...");
+            message.textContent = "連携が完了しました！この画面を閉じてトーク画面に戻ってください。";
+            message.className = "muted success";
+            button.disabled = true;
+            if (liff.isInClient()) {
+              setTimeout(() => { liff.closeWindow(); }, 3000);
+            }
+          } else {
+            addLog(`Error from server: ${text}`);
+            message.textContent = `連携に失敗: ${res.status} ${text}`;
+            message.className = "muted error";
+          }
+        } catch (error) {
+          addLog(`Fetch error: ${error}`);
+          message.textContent = `連携に失敗: ${error}`;
+          message.className = "muted error";
+        }
       }
-
-      codeInput.addEventListener("input", updateButtonState);
-      codeInput.addEventListener("change", updateButtonState);
-      codeInput.addEventListener("keyup", updateButtonState);
 
       button.addEventListener("click", async () => {
         const code = codeInput.value.trim();
@@ -72,27 +128,7 @@
           message.className = "muted error";
           return;
         }
-        try {
-          message.textContent = "連携中...";
-          message.className = "muted";
-          const profile = await liff.getProfile();
-          const res = await fetch(endpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code, lineUserId: profile.userId }),
-          });
-          const text = await res.text();
-          if (res.ok) {
-            message.textContent = "連携が完了しました。";
-            message.className = "muted success";
-          } else {
-            message.textContent = `連携に失敗: ${res.status} ${text}`;
-            message.className = "muted error";
-          }
-        } catch (error) {
-          message.textContent = `連携に失敗: ${error}`;
-          message.className = "muted error";
-        }
+        await performLink(code);
       });
 
       init();
