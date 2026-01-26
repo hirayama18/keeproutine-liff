@@ -46,6 +46,15 @@
 
       async function init() {
         addLog("Initializing LIFF...");
+        addLog(`Current URL: ${location.href}`);
+        
+        // ログイン前にコードを一時保存
+        const urlCode = params.get("code");
+        if (urlCode) {
+          sessionStorage.setItem("link_code", urlCode);
+          addLog("Code saved to storage");
+        }
+
         if (!liffId || !endpoint) {
           message.textContent = "設定が不足しています。URLを確認してください。";
           message.className = "muted error";
@@ -67,13 +76,16 @@
           message.textContent = "";
           updateButtonState();
 
-          const autoCode = params.get("code");
-          addLog(`Code in URL: ${autoCode || "none"}`);
+          // メモリまたはURLからコードを取得
+          const autoCode = urlCode || sessionStorage.getItem("link_code");
+          addLog(`Code found: ${autoCode || "none"}`);
           
           if (autoCode) {
             addLog("Starting auto-link...");
             codeInput.value = autoCode;
             updateButtonState();
+            // 一度実行したらメモリをクリア
+            sessionStorage.removeItem("link_code");
             await performLink(autoCode);
           }
         } catch (error) {
