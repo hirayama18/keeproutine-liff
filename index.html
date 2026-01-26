@@ -26,11 +26,21 @@
     </div>
 
     <script>
-      const params = new URLSearchParams(location.search);
+      function getParam(name) {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has(name)) return urlParams.get(name);
+        
+        // #の後ろに入っている場合も考慮
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        if (hashParams.has(name)) return hashParams.get(name);
+        
+        return null;
+      }
+
       const defaultLiffId = "2008961313-udzVjHhi";
       const defaultEndpoint = "https://mvzorfznpwgjflhsjspc.supabase.co/functions/v1/line-link";
-      const liffId = params.get("liffId") || defaultLiffId;
-      const endpoint = params.get("endpoint") || defaultEndpoint;
+      const liffId = getParam("liffId") || defaultLiffId;
+      const endpoint = getParam("endpoint") || defaultEndpoint;
       const message = document.getElementById("message");
       const button = document.getElementById("submit");
       const codeInput = document.getElementById("code");
@@ -46,13 +56,15 @@
 
       async function init() {
         addLog("Initializing LIFF...");
-        addLog(`Current URL: ${location.href}`);
+        addLog(`Full URL: ${window.location.href}`);
+        addLog(`Search: ${window.location.search}`);
+        addLog(`Hash: ${window.location.hash}`);
         
         // ログイン前にコードを一時保存
-        const urlCode = params.get("code");
+        const urlCode = getParam("code");
         if (urlCode) {
           sessionStorage.setItem("link_code", urlCode);
-          addLog("Code saved to storage");
+          addLog(`Code found in URL and saved: ${urlCode}`);
         }
 
         if (!liffId || !endpoint) {
@@ -67,7 +79,7 @@
           
           if (!liff.isLoggedIn()) {
             addLog("Not logged in, starting login...");
-            liff.login({ redirectUri: location.href });
+            liff.login({ redirectUri: window.location.href });
             return;
           }
           
@@ -77,16 +89,17 @@
           updateButtonState();
 
           // メモリまたはURLからコードを取得
-          const autoCode = urlCode || sessionStorage.getItem("link_code");
-          addLog(`Code found: ${autoCode || "none"}`);
+          const finalCode = getParam("code") || sessionStorage.getItem("link_code");
+          addLog(`Final code to use: ${finalCode || "none"}`);
           
-          if (autoCode) {
+          if (finalCode) {
             addLog("Starting auto-link...");
-            codeInput.value = autoCode;
+            codeInput.value = finalCode;
             updateButtonState();
-            // 一度実行したらメモリをクリア
             sessionStorage.removeItem("link_code");
-            await performLink(autoCode);
+            await performLink(finalCode);
+          } else {
+            addLog("No code found. Please enter manually if needed.");
           }
         } catch (error) {
           addLog(`Init error: ${error}`);
