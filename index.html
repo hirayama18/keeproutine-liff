@@ -62,28 +62,18 @@
           <button id="link-submit" style="width: 100%; margin-top: 15px; padding: 12px; background: #007bff; color: white; border: none; border-radius: 8px; font-weight: bold;">連携する</button>
         </div>
         <p id="link-message" class="muted"></p>
+        <div id="friend-add" style="display: none;">
+          <button id="friend-add-btn" class="btn-line">LINE公式アカウントを友だち追加</button>
+          <p id="friend-add-note" class="muted">通知を受け取るには友だち追加が必要です。</p>
+        </div>
       </div>
 
-      <div id="debug" style="font-size: 10px; color: #aaa; margin-top: 40px; border-top: 1px solid #eee; padding-top: 10px;">
-        <details>
-          <summary>Debug Info</summary>
-          <ul id="log-list" style="padding-left: 15px;"></ul>
-        </details>
-      </div>
     </div>
 
     <script>
       const defaultLiffId = "2008961313-udzVjHhi";
       const apiBase = "https://mvzorfznpwgjflhsjspc.supabase.co/functions/v1";
       
-      const logList = document.getElementById("log-list");
-      function addLog(msg) {
-        const li = document.createElement("li");
-        li.textContent = `${new Date().toLocaleTimeString()}: ${msg}`;
-        logList.insertBefore(li, logList.firstChild);
-        console.log(msg);
-      }
-
       function getParam(name) {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has(name)) return urlParams.get(name);
@@ -101,7 +91,6 @@
       }
 
       async function init() {
-        addLog("LIFF Init start...");
         if (!liff.isInClient()) {
           document.getElementById("external-browser-view").style.display = "block";
         }
@@ -127,8 +116,8 @@
             showLinkView(profile.userId, code);
           }
         } catch (e) {
-          addLog("Error: " + e);
-          document.getElementById("loading").textContent = "エラーが発生しました: " + e;
+          console.error("Error: " + e);
+          document.getElementById("loading").textContent = "エラーが発生しました。LINEアプリから再度開いてください。";
         }
       }
 
@@ -143,8 +132,13 @@
         list.innerHTML = "読み込み中...";
         
         try {
+          const idToken = liff.getIDToken();
           const res = await fetch(`${apiBase}/liff-api`, {
             method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${idToken}`
+            },
             body: JSON.stringify({ action: "get", lineUserId, date })
           });
           const data = await res.json();
@@ -176,8 +170,13 @@
 
       async function updateStatus(lineUserId, date, slotId, status) {
         try {
+          const idToken = liff.getIDToken();
           const res = await fetch(`${apiBase}/liff-api`, {
             method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${idToken}`
+            },
             body: JSON.stringify({ action: "update", lineUserId, date, slotId, status })
           });
           if (res.ok) {
@@ -203,23 +202,90 @@
         btn.onclick = () => performLink(lineUserId, input.value, msg);
       }
 
+      async function ensureFriendship(addFriendUrl, msgView) {
+        if (typeof liff.getFriendship !== "function" || typeof liff.requestFriendship !== "function") {
+          msgView.textContent = "連携は完了しました。通知を受け取るには下のボタンから友だち追加してください。";
+          showFriendAdd(addFriendUrl);
+          return false;
+        }
+
+        try {
+          const friendship = await liff.getFriendship();
+          if (friendship.friendFlag) {
+            return true;
+          }
+
+          msgView.textContent = "連携が完了しました。通知を受け取るため、友だち追加を確認してください。";
+          await liff.requestFriendship();
+
+          const verifiedFriendship = await liff.getFriendship();
+          if (verifiedFriendship.friendFlag) {
+            return true;
+          }
+
+          msgView.textContent = "連携は完了しました。通知を受け取るには友だち追加を完了してください。";
+          showFriendAdd(addFriendUrl);
+          return false;
+        } catch (e) {
+          console.warn("Failed to request friendship:", e);
+          msgView.textContent = "連携は完了しました。友だち追加の確認を開けなかったため、下のボタンから追加してください。";
+          showFriendAdd(addFriendUrl);
+          return false;
+        }
+      }
+
       async function performLink(lineUserId, code, msgView) {
+        document.getElementById("friend-add").style.display = "none";
         msgView.textContent = "連携中...";
         try {
+          const idToken = liff.getIDToken();
           const res = await fetch(`${apiBase}/line-link`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { 
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${idToken}`
+            },
             body: JSON.stringify({ code, lineUserId }),
           });
           if (res.ok) {
-            msgView.innerHTML = "<span class='success'>連携が完了しました！</span>";
-            setTimeout(() => liff.closeWindow(), 2000);
+            const data = await res.json().catch(() => ({}));
+            const needsFriend = !!data.needsFriend;
+            const addFriendUrl = data.addFriendUrl;
+
+            if (needsFriend) {
+              const friendAdded = await ensureFriendship(addFriendUrl, msgView);
+              if (friendAdded) {
+                msgView.textContent = "連携と友だち追加が完了しました！";
+                setTimeout(() => liff.closeWindow(), 2000);
+              }
+            } else {
+              msgView.textContent = "連携が完了しました！";
+              setTimeout(() => liff.closeWindow(), 2000);
+            }
           } else {
             const txt = await res.text();
             msgView.innerHTML = `<span class='error'>失敗: ${txt}</span>`;
           }
         } catch (e) {
           msgView.innerHTML = `<span class='error'>エラー: ${e}</span>`;
+        }
+      }
+
+      function showFriendAdd(url) {
+        const container = document.getElementById("friend-add");
+        const button = document.getElementById("friend-add-btn");
+        container.style.display = "block";
+        button.style.display = "block";
+        if (url) {
+          button.onclick = () => {
+            if (liff.isInClient()) {
+              liff.openWindow({ url, external: false });
+            } else {
+              window.location.href = url;
+            }
+          };
+        } else {
+          button.style.display = "none";
         }
       }
 
